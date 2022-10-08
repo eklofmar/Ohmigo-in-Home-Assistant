@@ -1,0 +1,93 @@
+####
+#2022-10-08
+#Styrning av värmepump
+#Styrning via 2st Ohmigo 
+#https://www.ohmigo.io/
+
+##Terminal kommandon
+# Ha Hardware info
+#
+# stty -F /dev/ttyUSBX raw 9600
+# cat -v < /dev/ttyUSBX
+# echo -e 'AT?' >> /dev/ttyUSBX
+####
+
+HA_Ohmigo:
+  sensor:
+#Ohmigo 1 - Innegivare
+    - platform: serial
+      serial_port: /dev/ttyUSB1
+      baudrate: 9600
+      name: ohmigo1
+#Ohmigo 2 - Uteegivare
+    - platform: serial
+      serial_port: /dev/ttyUSB2
+      baudrate: 9600
+      name: ohmigo2
+
+    - platform: template
+      sensors:
+#Ohmigo 1 - Innegivare
+        ohmigo_1_value:
+          friendly_name: ohmigo_1_value #kan vara både temp och resistans beroende på vad som skickas
+          unit_of_measurement: "ohm"
+          value_template: " {{ states('sensor.ohmigo1').split(',')[0] | replace('ATR=','') }} "
+
+        ohmigo_1_status:
+          friendly_name: ohmigo_1_status #kan vara OK,ERROR=SYNTAX
+          value_template: "{{ states('sensor.ohmigo1').split(',')[1]}}"
+
+        ohmigo_1_indoor_temp_set:
+          friendly_name: ohmigo_1_indoor_temp_set #
+          device_class: temperature
+          unit_of_measurement: °C
+          value_template: >-
+                          {{ states('sensor.indoor_temperature') |float + states('input_number.indoor_temperatur_change') |float }}
+
+        ohmigo_1_temp_to_resistanse:
+          friendly_name: ohmigo_1_temp_to_resistanse #
+          unit_of_measurement: 'ohm'
+          # Nedan gäller för en CTC NTC22K
+          value_template: >-
+                          {% set t1 = states('sensor.ohmigo_1_indoor_temp_set') |float + 273.15 %}
+                          {% set a1 = 4.2 / 100 %}
+                          {% set t0 = 20 + 273.15 %}
+                          {% set r0 = 27100 %}
+                          {{ r0 * (e**(a1*((t0**2)*((1/t1)-(1/t0))))) | round(4)}}
+#Ohmigo 2 - Utegivare
+        ohmigo_2_value:
+          friendly_name: ohmigo_2_value #kan vara både temp och resistans beroende på vad som skickas
+          unit_of_measurement: "ohm"
+          value_template: " {{ states('sensor.ohmigo2').split(',')[0] | replace('ATR=','') }} "
+
+        ohmigo_2_status:
+          friendly_name: ohmigo_2_status #kan vara OK,ERROR=SYNTAX
+          value_template: "{{ states('sensor.ohmigo2').split(',')[1]}}"
+
+        ohmigo_2_indoor_temp_set:
+          friendly_name: ohmigo_2_indoor_temp_set #
+          device_class: temperature
+          unit_of_measurement: °C
+          value_template: >-
+                          {{ states('sensor.outdoor_temperature') |float + states('input_number.outdoor_temperatur_change') |float }}
+
+        ohmigo_2_temp_to_resistanse:
+          friendly_name: ohmigo_2_temp_to_resistanse #
+          unit_of_measurement: 'ohm'
+          # Nedan gäller för en CTC NTC150
+          value_template: >-
+                          {% set t1 = states('sensor.ohmigo_2_indoor_temp_set') |float + 273.15 %}
+                          {% set a1 = 4.432147 / 100 %} 
+                          {% set t0 = 5 + 273.15 %}
+                          {% set r0 = 342 %}
+                          {{ r0 * (e**(a1*((t0**2)*((1/t1)-(1/t0))))) | round(4)}}
+
+  shell_command:
+#Ohmigo 1 Innegivare
+    ohmigo_1_set_resistans: /bin/bash -c "echo -e 'ATR={{states('sensor.ohmigo_1_temp_to_resistanse')}},ACK<CR><LF>' >> /dev/ttyUSB1"
+    ohmigo_1_set_ntc: /bin/bash -c "echo -e 'ATT=20,TYPE=018,ACK<CR><LF>' >> /dev/ttyUSB1"
+    ohmigo_1_status: /bin/bash -c "echo -e 'AT?,ACK<CR><LF>' >> /dev/ttyUSB1"
+#Ohmigo 2 Utegivare
+    ohmigo_2_set_resistans: /bin/bash -c "echo -e 'ATR={{states('sensor.ohmigo_2_temp_to_resistanse')}},ACK<CR><LF>' >> /dev/ttyUSB2"
+    ohmigo_2_set_ntc: /bin/bash -c "echo -e 'ATT=20,TYPE=030,ACK<CR><LF>' >> /dev/ttyUSB2"
+    ohmigo_2_status: /bin/bash -c "echo -e 'AT?,ACK<CR><LF>' >> /dev/ttyUSB2"
