@@ -12,7 +12,7 @@
 # echo -e 'AT?' >> /dev/ttyUSBX
 ####
 
-HA_Ohmigo:
+ha_Ohmigo:
   sensor:
 #Ohmigo 1 - Innegivare
     - platform: serial
